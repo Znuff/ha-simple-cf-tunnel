@@ -1,6 +1,7 @@
 name: Simple Cloudflare Tunnel
-version: "0.3.0"
+version: "0.3.1"
 slug: simple_cf_tunnel
+image: ghcr.io/znuff/{arch}-simple-cf-tunnel
 description: >-
   Reach Home Assistant through Cloudflare: your own hostname,
   or a temporary trycloudflare.com URL. No open ports.

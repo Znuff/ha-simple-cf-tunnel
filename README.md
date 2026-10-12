@@ -17,8 +17,8 @@ Or manually: **Settings → Add-ons → Add-on store → ⋮ → Repositories**,
 `https://github.com/Znuff/ha-simple-cf-tunnel`, then install
 **Simple Cloudflare Tunnel**.
 
-The add-on is built on your device during install, so the first install takes
-a minute or two.
+Images are prebuilt for `amd64` and `aarch64` by GitHub Actions and published
+to GitHub's container registry, so installs and updates only download them.
 
 See [the add-on documentation](simple_cf_tunnel/DOCS.md) for usage, security
 notes and the required trusted proxy setting.

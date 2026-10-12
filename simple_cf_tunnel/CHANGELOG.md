@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Installs and updates now download a prebuilt image instead of building the
+  add-on on your device, so they finish in seconds.
+
 ## 0.3.0
 
 - One-click fix for the trusted proxy warning. It changes Home Assistant's
