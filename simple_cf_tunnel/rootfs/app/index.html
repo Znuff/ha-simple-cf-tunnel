@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloudflare Tunnel</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1c1f23; --muted: #5f6670; --border: #dde1e6;
+    --accent: #f38020; --accent-text: #ffffff; --warn-bg: #fff4e5; --warn-border: #f0b46a;
+    --bad-bg: #fdecec; --bad-border: #e8a0a0; --ok: #2e7d32;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111315; --card: #1c1f23; --text: #e8eaed; --muted: #9aa0a6; --border: #33373d;
+      --warn-bg: #2d2416; --warn-border: #8a6326; --bad-bg: #2d1a1a; --bad-border: #8a3a3a; --ok: #81c784;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .note { border-radius: 8px; padding: 12px 14px; margin: 0 0 16px; border: 1px solid var(--warn-border); background: var(--warn-bg); }
+  .note.bad { border-color: var(--bad-border); background: var(--bad-bg); }
+  .note p { margin: 0 0 8px; } .note p:last-child { margin: 0; }
+  pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; overflow-x: auto; font-size: 13px; }
+  label { display: block; font-weight: 600; margin-bottom: 6px; }
+  select { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+           background: var(--card); color: var(--text); width: 100%; max-width: 240px; margin-bottom: 16px; }
+  button { font: inherit; font-weight: 600; padding: 9px 18px; border-radius: 8px; border: 1px solid var(--border);
+           background: var(--card); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  button:disabled { opacity: .6; cursor: default; }
+  .url { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0 12px; }
+  .url a { font-size: 17px; font-weight: 600; color: var(--accent); word-break: break-all; }
+  .status { font-weight: 600; color: var(--ok); margin: 0 0 4px; }
+  .muted { color: var(--muted); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Temporary access</h1>
+  <p class="lead">Share Home Assistant on a random trycloudflare.com URL. No Cloudflare account needed.
+    The URL stops working for good when the tunnel stops.</p>
+
+  <div id="proxy-warning" class="note bad" hidden>
+    <p><strong>Home Assistant doesn't trust this add-on as a reverse proxy yet.</strong>
+      Visitors will get "400: Bad Request" until you fix this.</p>
+    <p>In <em>Settings → System → Network → HTTP server</em>, enable "Trust X-Forwarded-For" and add
+      <code>172.30.33.0/24</code> as a trusted proxy. Or add this to <code>configuration.yaml</code>:</p>
+    <pre>http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 172.30.33.0/24</pre>
+    <p>Then restart Home Assistant and <button id="recheck" type="button">Check again</button></p>
+  </div>
+
+  <div id="error" class="note bad" hidden></div>
+
+  <section class="card" id="idle" hidden>
+    <p id="ended" class="muted" hidden></p>
+    <label for="duration">Keep the tunnel open for</label>
+    <select id="duration">
+      <option value="3600">1 hour</option>
+      <option value="14400" selected>4 hours</option>
+      <option value="86400">24 hours</option>
+      <option value="">Until I stop it</option>
+    </select>
+    <div class="note">
+      <p>Anyone with the URL can reach your Home Assistant login page.
+        Give the person their own non-admin user (Settings → People), and remove it afterwards.</p>
+    </div>
+    <button id="start" class="primary" type="button">Start tunnel</button>
+  </section>
+
+  <section class="card" id="starting" hidden>
+    <p>Starting… waiting for Cloudflare to assign a URL.</p>
+    <button id="cancel" type="button">Cancel</button>
+  </section>
+
+  <section class="card" id="running" hidden>
+    <p class="status">Tunnel is running</p>
+    <div class="url">
+      <a id="url" target="_blank" rel="noopener noreferrer"></a>
+      <button id="copy" type="button">Copy</button>
+    </div>
+    <p id="countdown" class="muted"></p>
+    <button id="stop" type="button">Stop tunnel</button>
+  </section>
+</main>
+
+<script>
+const BASE = __INGRESS_PATH__;
+const $ = (id) => document.getElementById(id);
+let state = null;
+let clockOffset = 0;
+
+async function api(path, body) {
+  const options = body === undefined ? {} : {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Requested-With": "simple-cf-tunnel" },
+    body: JSON.stringify(body),
+  };
+  const response = await fetch(BASE + path, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+  return data;
+}
+
+function showError(message) {
+  $("error").textContent = message || "";
+  $("error").hidden = !message;
+}
+
+function apply(data) {
+  state = data;
+  clockOffset = data.now - Date.now() / 1000;
+  $("proxy-warning").hidden = data.proxy_trusted !== false;
+  $("idle").hidden = !["idle", "ended"].includes(data.state);
+  $("starting").hidden = data.state !== "starting";
+  $("running").hidden = data.state !== "running";
+  $("ended").hidden = data.state !== "ended";
+  $("ended").textContent = data.reason ? `Last tunnel ended: ${data.reason}` : "";
+  if (data.state === "running" && $("url").href !== data.url) {
+    $("url").href = data.url;
+    $("url").textContent = data.url;
+  }
+  tick();
+}
+
+function tick() {
+  if (!state || state.state !== "running") return;
+  if (!state.expires_at) {
+    $("countdown").textContent = "Runs until you stop it.";
+    return;
+  }
+  const left = Math.max(0, Math.round(state.expires_at - (Date.now() / 1000 + clockOffset)));
+  const h = Math.floor(left / 3600), m = Math.floor(left % 3600 / 60), s = left % 60;
+  $("countdown").textContent = `Stops in ${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s.`;
+}
+
+async function refresh() {
+  try { apply(await api("/api/state")); showError(""); }
+  catch (error) { showError(`Can't reach the add-on: ${error.message}`); }
+}
+
+async function act(button, path, body) {
+  button.disabled = true;
+  try { apply(await api(path, body)); showError(""); }
+  catch (error) { showError(error.message); }
+  finally { button.disabled = false; }
+}
+
+async function copyUrl() {
+  const text = $("url").textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Clipboard API needs a secure context; fall back for plain-http Home Assistant.
+    const area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  $("copy").textContent = "Copied";
+  setTimeout(() => { $("copy").textContent = "Copy"; }, 1500);
+}
+
+$("start").addEventListener("click", () => {
+  const value = $("duration").value;
+  act($("start"), "/api/start", { duration: value ? Number(value) : null });
+});
+$("stop").addEventListener("click", () => act($("stop"), "/api/stop", {}));
+$("cancel").addEventListener("click", () => act($("cancel"), "/api/stop", {}));
+$("recheck").addEventListener("click", () => act($("recheck"), "/api/recheck", {}));
+$("copy").addEventListener("click", copyUrl);
+
+refresh();
+setInterval(refresh, 2000);
+setInterval(tick, 1000);
+</script>
+</body>
+</html>
