@@ -1,5 +1,5 @@
 name: Simple Cloudflare Tunnel
-version: "0.2.0"
+version: "0.3.0"
 slug: simple_cf_tunnel
 description: >-
   Reach Home Assistant through Cloudflare: your own hostname,

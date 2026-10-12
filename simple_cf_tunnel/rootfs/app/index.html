@@ -68,8 +68,15 @@
   trusted_proxies:
     - 172.30.33.0/24</pre>
     <p>Then restart Home Assistant and <button id="recheck" type="button">Check again</button></p>
+    <div id="proxy-fix-box" hidden>
+      <p><strong>Or let the add-on do it.</strong> It changes this setting using your login, then
+        Home Assistant restarts. Reopen this panel within 5 minutes to confirm the change;
+        otherwise Home Assistant reverts it on its own.</p>
+      <button id="proxy-fix" class="primary" type="button">Fix it for me (restarts Home Assistant)</button>
+    </div>
   </div>
 
+  <div id="notice" class="note" hidden></div>
   <div id="error" class="note bad" hidden></div>
 
   <!-- ===================== Permanent ===================== -->
@@ -220,10 +227,16 @@ function showError(message) {
   $("error").hidden = !message;
 }
 
+function showNotice(message) {
+  $("notice").textContent = message || "";
+  $("notice").hidden = !message;
+}
+
 function apply(data) {
   state = data;
   clockOffset = data.now - Date.now() / 1000;
   $("proxy-warning").hidden = data.proxy_trusted !== false;
+  $("proxy-fix-box").hidden = !(haConnection && data.ha_port);
   renderPermanent(data.permanent);
   renderQuick(data.quick);
 }
@@ -395,7 +408,95 @@ $("quick-cancel").addEventListener("click", () => act($("quick-cancel"), "/api/q
 $("quick-copy").addEventListener("click", copyUrl);
 $("recheck").addEventListener("click", () => act($("recheck"), "/api/recheck", {}).catch(() => {}));
 
-refresh();
+// ---- trusted proxy fix ---------------------------------------------------------
+// Uses the logged-in user's own Home Assistant connection from the parent frame
+// (this panel is a same-origin Ingress iframe), so the add-on needs no Core API access.
+// HA keeps a new HTTP config "pending" and reverts it after 5 minutes unless promoted.
+
+const ADDON_SUBNET = "172.30.33.0/24";
+const FIX_MARKER = "simple-cf-tunnel:proxy-fix";
+let haConnection = null;
+
+async function findHaConnection() {
+  try {
+    if (window.parent === window || !window.parent.hassConnection) return null;
+    return (await window.parent.hassConnection).conn;
+  } catch {
+    return null;  // not inside Home Assistant's frame
+  }
+}
+
+function storage(action, value) {
+  try {
+    if (action === "set") localStorage.setItem(FIX_MARKER, value);
+    else if (action === "remove") localStorage.removeItem(FIX_MARKER);
+    else return localStorage.getItem(FIX_MARKER);
+  } catch {
+    return null;
+  }
+}
+
+function describe(error) {
+  if (error && error.code === "unknown_command") {
+    return "This Home Assistant version can't change the HTTP settings this way. Use the steps above.";
+  }
+  return (error && (error.message || error.code)) || String(error);
+}
+
+$("proxy-fix").addEventListener("click", async () => {
+  const button = $("proxy-fix");
+  button.disabled = true;
+  try {
+    const current = await haConnection.sendMessagePromise({ type: "http/config" });
+    if (current.pending && !current.pending.error) {
+      throw new Error("Home Assistant already has an unconfirmed HTTP settings change. Confirm or discard it first.");
+    }
+    const slot = { stable: current.stable, pending: current.pending }[current.active_config_type] || current.default;
+    const config = { ...slot };
+    for (const meta of ["created_at", "error", "error_message"]) delete config[meta];
+    config.server_port = state.ha_port;  // keep HA on the port it runs on now
+    config.use_x_forwarded_for = true;
+    config.trusted_proxies = [...new Set([...(config.trusted_proxies || []), ADDON_SUBNET])];
+
+    storage("set", String(Date.now()));
+    await haConnection.sendMessagePromise({ type: "http/config/configure", config });
+    showError("");
+    showNotice("Home Assistant is restarting. Reopen this panel within 5 minutes to confirm the change.");
+  } catch (error) {
+    storage("remove");
+    showError(`Couldn't change the setting: ${describe(error)}`);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+// After the restart: confirm the change, but only one this panel started and only if it works.
+async function confirmProxyFix() {
+  const started = Number(storage("get"));
+  if (!started) return;
+  if (Date.now() - started > 10 * 60 * 1000) return storage("remove");
+  try {
+    const current = await haConnection.sendMessagePromise({ type: "http/config" });
+    if (current.active_config_type !== "pending") return;  // not restarted yet, or already reverted
+    const data = await api("/api/recheck", {});
+    apply(data);
+    if (data.proxy_trusted !== true) {
+      storage("remove");
+      return showError("The new setting didn't fix the proxy check, so it wasn't confirmed. Home Assistant will revert it.");
+    }
+    await haConnection.sendMessagePromise({ type: "http/config/promote" });
+    storage("remove");
+    showNotice("Trusted proxy setting confirmed. Remote access through the tunnel works now.");
+  } catch (error) {
+    showError(`Couldn't confirm the setting: ${describe(error)}`);
+  }
+}
+
+(async () => {
+  haConnection = await findHaConnection();
+  await refresh();
+  if (haConnection) await confirmProxyFix();
+})();
 setInterval(refresh, 2000);
 setInterval(tick, 1000);
 </script>

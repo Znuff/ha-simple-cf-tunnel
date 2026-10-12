@@ -9,16 +9,21 @@ import urllib.request
 from proc import log
 
 
-def origin():
-    """Return (origin URL, uses TLS) for Home Assistant, as reported by the Supervisor."""
+def core_info():
+    """Return (port, uses TLS) for Home Assistant, as reported by the Supervisor."""
     request = urllib.request.Request(
         "http://supervisor/core/info",
         headers={"Authorization": f"Bearer {os.environ['SUPERVISOR_TOKEN']}"},
     )
     with urllib.request.urlopen(request, timeout=10) as response:
         info = json.load(response)["data"]
-    scheme = "https" if info["ssl"] else "http"
-    return f"{scheme}://homeassistant:{info['port']}", bool(info["ssl"])
+    return int(info["port"]), bool(info["ssl"])
+
+
+def origin():
+    """Return (origin URL, uses TLS) for Home Assistant."""
+    port, uses_tls = core_info()
+    return f"{'https' if uses_tls else 'http'}://homeassistant:{port}", uses_tls
 
 
 def proxy_trusted():

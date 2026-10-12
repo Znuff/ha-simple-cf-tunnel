@@ -21,11 +21,16 @@ PAGE = pathlib.Path(__file__).with_name("index.html")
 
 QUICK = None
 PERMANENT = None
-PROXY = {"trusted": None}
+PROXY = {"trusted": None, "ha_port": None}
 
 
 def recheck_proxy():
     PROXY["trusted"] = ha.proxy_trusted()
+    try:
+        # The panel's "fix it" flow must keep HA on the port it runs on now.
+        PROXY["ha_port"] = ha.core_info()[0]
+    except Exception as error:  # noqa: BLE001 - the panel then offers only manual steps
+        log(f"Could not read Home Assistant's port: {error}")
 
 
 def full_status():
@@ -33,6 +38,7 @@ def full_status():
         "permanent": PERMANENT.status(),
         "quick": QUICK.status(),
         "proxy_trusted": PROXY["trusted"],
+        "ha_port": PROXY["ha_port"],
         "now": time.time(),
     }
 

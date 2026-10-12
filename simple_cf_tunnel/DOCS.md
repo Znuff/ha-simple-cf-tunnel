@@ -86,6 +86,22 @@ Home Assistant rejects requests coming through a proxy it doesn't trust, and
 visitors see `400: Bad Request`. The add-on checks this and shows a warning in
 its panel if it's not set up.
 
+### Automatic fix
+
+The warning has a **Fix it for me** button. It changes the setting using your
+own Home Assistant login (the panel runs inside Home Assistant), so the add-on
+itself needs no extra permissions. It keeps your other HTTP settings, adds
+`172.30.33.0/24` as a trusted proxy, and Home Assistant restarts.
+
+Reopen the panel within 5 minutes afterwards. If the proxy check passes, the
+panel confirms the change. If you don't come back, or the check fails, Home
+Assistant reverts the change on its own.
+
+The button only appears when the panel is opened inside Home Assistant on a
+version that supports changing HTTP settings this way.
+
+### Manual fix
+
 In **Settings → System → Network → HTTP server**, enable "Trust
 X-Forwarded-For" and add `172.30.33.0/24` as a trusted proxy. Or add this to
 `configuration.yaml`:
