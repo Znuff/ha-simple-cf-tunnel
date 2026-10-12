@@ -1,9 +1,9 @@
 name: Simple Cloudflare Tunnel
-version: "0.1.0"
+version: "0.2.0"
 slug: simple_cf_tunnel
 description: >-
-  Share Home Assistant temporarily on a trycloudflare.com URL.
-  No Cloudflare account needed.
+  Reach Home Assistant through Cloudflare: your own hostname,
+  or a temporary trycloudflare.com URL. No open ports.
 url: https://github.com/Znuff/ha-simple-cf-tunnel
 arch:
   - amd64

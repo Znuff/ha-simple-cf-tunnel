@@ -1,9 +1,13 @@
 # Simple Cloudflare Tunnel for Home Assistant
 
-A Home Assistant add-on that gives someone temporary access to your Home
-Assistant through a Cloudflare Quick Tunnel: a random `trycloudflare.com` URL,
-no Cloudflare account, domain or port forwarding needed. Tunnels expire after
-a duration you pick.
+A Home Assistant add-on that exposes Home Assistant through Cloudflare, without
+opening ports. Everything is set up from its sidebar panel:
+
+- **Permanent access** on your own hostname, such as `ha.example.com`. Paste a
+  scoped Cloudflare API token, pick a hostname, click Set up: the add-on
+  creates the tunnel and DNS record, and can remove them again.
+- **Temporary access** on a random `trycloudflare.com` URL, no Cloudflare
+  account needed. Tunnels expire after a duration you pick.
 
 ## Install
 

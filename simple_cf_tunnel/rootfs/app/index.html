@@ -8,45 +8,55 @@
   :root {
     --bg: #f6f7f9; --card: #ffffff; --text: #1c1f23; --muted: #5f6670; --border: #dde1e6;
     --accent: #f38020; --accent-text: #ffffff; --warn-bg: #fff4e5; --warn-border: #f0b46a;
-    --bad-bg: #fdecec; --bad-border: #e8a0a0; --ok: #2e7d32;
+    --bad-bg: #fdecec; --bad-border: #e8a0a0; --ok: #2e7d32; --bad: #c62828;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #111315; --card: #1c1f23; --text: #e8eaed; --muted: #9aa0a6; --border: #33373d;
-      --warn-bg: #2d2416; --warn-border: #8a6326; --bad-bg: #2d1a1a; --bad-border: #8a3a3a; --ok: #81c784;
+      --warn-bg: #2d2416; --warn-border: #8a6326; --bad-bg: #2d1a1a; --bad-border: #8a3a3a;
+      --ok: #81c784; --bad: #ef9a9a;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   main { max-width: 640px; margin: 0 auto; padding: 24px 16px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  .lead { color: var(--muted); margin: 0 0 20px; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  h1 { font-size: 22px; margin: 0 0 16px; }
+  h2 { font-size: 18px; margin: 0 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
   .note { border-radius: 8px; padding: 12px 14px; margin: 0 0 16px; border: 1px solid var(--warn-border); background: var(--warn-bg); }
   .note.bad { border-color: var(--bad-border); background: var(--bad-bg); }
   .note p { margin: 0 0 8px; } .note p:last-child { margin: 0; }
+  .note ul { margin: 4px 0 8px; padding-left: 20px; }
   pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; overflow-x: auto; font-size: 13px; }
   label { display: block; font-weight: 600; margin-bottom: 6px; }
-  select { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
-           background: var(--card); color: var(--text); width: 100%; max-width: 240px; margin-bottom: 16px; }
+  label.check { display: flex; gap: 8px; align-items: center; font-weight: 400; }
+  input[type=text], input[type=password], select {
+    font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text); width: 100%; max-width: 360px; }
+  .field { margin-bottom: 16px; }
+  .host { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .host input { max-width: 160px; }
   button { font: inherit; font-weight: 600; padding: 9px 18px; border-radius: 8px; border: 1px solid var(--border);
            background: var(--card); color: var(--text); cursor: pointer; }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  button.danger { border-color: var(--bad); color: var(--bad); }
   button:disabled { opacity: .6; cursor: default; }
   .url { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0 12px; }
   .url a { font-size: 17px; font-weight: 600; color: var(--accent); word-break: break-all; }
-  .status { font-weight: 600; color: var(--ok); margin: 0 0 4px; }
+  .status { font-weight: 600; margin: 0 0 4px; }
+  .status.ok { color: var(--ok); } .status.bad { color: var(--bad); }
   .muted { color: var(--muted); }
-  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
+  a { color: var(--accent); }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Temporary access</h1>
-  <p class="lead">Share Home Assistant on a random trycloudflare.com URL. No Cloudflare account needed.
-    The URL stops working for good when the tunnel stops.</p>
+  <h1>Cloudflare Tunnel</h1>
 
   <div id="proxy-warning" class="note bad" hidden>
     <p><strong>Home Assistant doesn't trust this add-on as a reverse proxy yet.</strong>
@@ -62,35 +72,122 @@
 
   <div id="error" class="note bad" hidden></div>
 
-  <section class="card" id="idle" hidden>
-    <p id="ended" class="muted" hidden></p>
-    <label for="duration">Keep the tunnel open for</label>
-    <select id="duration">
-      <option value="3600">1 hour</option>
-      <option value="14400" selected>4 hours</option>
-      <option value="86400">24 hours</option>
-      <option value="">Until I stop it</option>
-    </select>
-    <div class="note">
-      <p>Anyone with the URL can reach your Home Assistant login page.
-        Give the person their own non-admin user (Settings → People), and remove it afterwards.</p>
+  <!-- ===================== Permanent ===================== -->
+  <section class="card">
+    <h2>Permanent access</h2>
+    <p class="lead">Your own hostname, such as ha.example.com, on a domain you have in Cloudflare.</p>
+
+    <div id="perm-active" hidden>
+      <p id="perm-status" class="status"></p>
+      <div class="url"><a id="perm-url" target="_blank" rel="noopener noreferrer"></a></div>
+      <div id="perm-origin-changed" class="note" hidden>
+        <p>Home Assistant's port or TLS setting changed since setup. Run setup again to update the tunnel.</p>
+      </div>
+      <div class="row">
+        <button id="perm-change" type="button">Change or repair</button>
+        <button id="perm-remove" class="danger" type="button">Remove</button>
+        <button id="perm-forget" type="button" hidden>Forget API token</button>
+      </div>
+      <div id="perm-remove-confirm" class="note bad" hidden>
+        <p>This deletes the tunnel and the DNS record for <strong id="perm-remove-host"></strong>.</p>
+        <div class="field" id="perm-remove-token-field">
+          <label for="perm-remove-token">Cloudflare API token</label>
+          <input id="perm-remove-token" type="password" autocomplete="off">
+        </div>
+        <div class="row">
+          <button id="perm-remove-yes" class="danger" type="button">Remove permanently</button>
+          <button id="perm-remove-no" type="button">Cancel</button>
+        </div>
+      </div>
     </div>
-    <button id="start" class="primary" type="button">Start tunnel</button>
+
+    <div id="perm-setup" hidden>
+      <div id="perm-token-step">
+        <div class="note">
+          <p>1. <a id="perm-token-link" target="_blank" rel="noopener noreferrer">Create a Cloudflare API token</a>.
+            The link pre-fills the form; check it has exactly these permissions:</p>
+          <ul>
+            <li>Account → Cloudflare Tunnel → Edit</li>
+            <li>Zone → Zone → Read</li>
+            <li>Zone → DNS → Edit</li>
+          </ul>
+          <p>You can limit Zone Resources to the one domain you'll use.</p>
+        </div>
+        <div class="field">
+          <label for="perm-token">2. Paste the token</label>
+          <input id="perm-token" type="password" autocomplete="off">
+        </div>
+      </div>
+      <p id="perm-token-saved" class="muted" hidden>Using the saved API token.</p>
+      <button id="perm-connect" type="button">Load my domains</button>
+
+      <div id="perm-zone-step" hidden>
+        <hr>
+        <div class="field">
+          <label for="perm-subdomain">Hostname</label>
+          <div class="host">
+            <input id="perm-subdomain" type="text" value="ha" autocomplete="off" spellcheck="false">
+            <span>.</span>
+            <select id="perm-zone" aria-label="Domain"></select>
+          </div>
+        </div>
+        <div class="field">
+          <label class="check"><input id="perm-remember" type="checkbox">
+            Remember the API token, so changes don't need it again</label>
+          <p class="muted">Not remembering it is safer: only the tunnel's own run token stays on this device.</p>
+        </div>
+        <div id="perm-conflict" class="note bad" hidden>
+          <p><strong id="perm-conflict-host"></strong> already has DNS records this add-on didn't create:</p>
+          <ul id="perm-conflict-list"></ul>
+          <p>Replacing them deletes them.</p>
+          <button id="perm-replace" class="danger" type="button">Replace and set up</button>
+        </div>
+        <div class="row">
+          <button id="perm-setup-go" class="primary" type="button">Set up</button>
+          <button id="perm-setup-cancel" type="button" hidden>Cancel</button>
+        </div>
+      </div>
+    </div>
   </section>
 
-  <section class="card" id="starting" hidden>
-    <p>Starting… waiting for Cloudflare to assign a URL.</p>
-    <button id="cancel" type="button">Cancel</button>
-  </section>
+  <!-- ===================== Temporary ===================== -->
+  <section class="card">
+    <h2>Temporary access</h2>
+    <p class="lead">A random trycloudflare.com URL, no Cloudflare account needed.
+      The URL stops working for good when the tunnel stops.</p>
 
-  <section class="card" id="running" hidden>
-    <p class="status">Tunnel is running</p>
-    <div class="url">
-      <a id="url" target="_blank" rel="noopener noreferrer"></a>
-      <button id="copy" type="button">Copy</button>
+    <div id="quick-idle" hidden>
+      <p id="quick-ended" class="muted" hidden></p>
+      <div class="field">
+        <label for="quick-duration">Keep the tunnel open for</label>
+        <select id="quick-duration">
+          <option value="3600">1 hour</option>
+          <option value="14400" selected>4 hours</option>
+          <option value="86400">24 hours</option>
+          <option value="">Until I stop it</option>
+        </select>
+      </div>
+      <div class="note">
+        <p>Anyone with the URL can reach your Home Assistant login page.
+          Give the person their own non-admin user (Settings → People), and remove it afterwards.</p>
+      </div>
+      <button id="quick-start" class="primary" type="button">Start tunnel</button>
     </div>
-    <p id="countdown" class="muted"></p>
-    <button id="stop" type="button">Stop tunnel</button>
+
+    <div id="quick-starting" hidden>
+      <p>Starting… waiting for Cloudflare to assign a URL.</p>
+      <button id="quick-cancel" type="button">Cancel</button>
+    </div>
+
+    <div id="quick-running" hidden>
+      <p class="status ok">Tunnel is running</p>
+      <div class="url">
+        <a id="quick-url" target="_blank" rel="noopener noreferrer"></a>
+        <button id="quick-copy" type="button">Copy</button>
+      </div>
+      <p id="quick-countdown" class="muted"></p>
+      <button id="quick-stop" type="button">Stop tunnel</button>
+    </div>
   </section>
 </main>
 
@@ -99,6 +196,8 @@ const BASE = __INGRESS_PATH__;
 const $ = (id) => document.getElementById(id);
 let state = null;
 let clockOffset = 0;
+let editing = false;      // the permanent setup form is open on an active tunnel
+let zonesLoaded = false;
 
 async function api(path, body) {
   const options = body === undefined ? {} : {
@@ -108,7 +207,11 @@ async function api(path, body) {
   };
   const response = await fetch(BASE + path, options);
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(data.error || `HTTP ${response.status}`);
+    error.data = data;
+    throw error;
+  }
   return data;
 }
 
@@ -121,43 +224,153 @@ function apply(data) {
   state = data;
   clockOffset = data.now - Date.now() / 1000;
   $("proxy-warning").hidden = data.proxy_trusted !== false;
-  $("idle").hidden = !["idle", "ended"].includes(data.state);
-  $("starting").hidden = data.state !== "starting";
-  $("running").hidden = data.state !== "running";
-  $("ended").hidden = data.state !== "ended";
-  $("ended").textContent = data.reason ? `Last tunnel ended: ${data.reason}` : "";
-  if (data.state === "running" && $("url").href !== data.url) {
-    $("url").href = data.url;
-    $("url").textContent = data.url;
+  renderPermanent(data.permanent);
+  renderQuick(data.quick);
+}
+
+function renderPermanent(p) {
+  const showSetup = !p.configured || editing;
+  $("perm-active").hidden = !p.configured || editing;
+  $("perm-setup").hidden = !showSetup;
+  $("perm-setup-cancel").hidden = !p.configured;
+  $("perm-token-link").href = p.token_url;
+  $("perm-token-step").hidden = p.token_saved;
+  $("perm-token-saved").hidden = !p.token_saved;
+  $("perm-forget").hidden = !p.token_saved;
+  $("perm-remove-token-field").hidden = p.token_saved;
+  $("perm-zone-step").hidden = !zonesLoaded;
+  if (!zonesLoaded) $("perm-remember").checked = p.token_saved;
+
+  if (p.configured) {
+    const url = `https://${p.hostname}`;
+    if ($("perm-url").textContent !== url) {
+      $("perm-url").href = url;
+      $("perm-url").textContent = url;
+    }
+    $("perm-remove-host").textContent = p.hostname;
+    $("perm-status").className = "status " + (p.connected ? "ok" : "bad");
+    $("perm-status").textContent = p.connected ? "Connected"
+      : p.last_exit ? `Not connected: ${p.last_exit}` : "Connecting…";
+    $("perm-origin-changed").hidden = !p.origin_changed;
+  }
+}
+
+function renderQuick(q) {
+  $("quick-idle").hidden = !["idle", "ended"].includes(q.state);
+  $("quick-starting").hidden = q.state !== "starting";
+  $("quick-running").hidden = q.state !== "running";
+  $("quick-ended").hidden = q.state !== "ended";
+  $("quick-ended").textContent = q.reason ? `Last tunnel ended: ${q.reason}` : "";
+  if (q.state === "running" && $("quick-url").textContent !== q.url) {
+    $("quick-url").href = q.url;
+    $("quick-url").textContent = q.url;
   }
   tick();
 }
 
 function tick() {
-  if (!state || state.state !== "running") return;
-  if (!state.expires_at) {
-    $("countdown").textContent = "Runs until you stop it.";
+  const q = state && state.quick;
+  if (!q || q.state !== "running") return;
+  if (!q.expires_at) {
+    $("quick-countdown").textContent = "Runs until you stop it.";
     return;
   }
-  const left = Math.max(0, Math.round(state.expires_at - (Date.now() / 1000 + clockOffset)));
+  const left = Math.max(0, Math.round(q.expires_at - (Date.now() / 1000 + clockOffset)));
   const h = Math.floor(left / 3600), m = Math.floor(left % 3600 / 60), s = left % 60;
-  $("countdown").textContent = `Stops in ${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s.`;
+  $("quick-countdown").textContent = `Stops in ${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s.`;
 }
 
 async function refresh() {
-  try { apply(await api("/api/state")); showError(""); }
+  try { apply(await api("/api/state")); }
   catch (error) { showError(`Can't reach the add-on: ${error.message}`); }
 }
 
 async function act(button, path, body) {
   button.disabled = true;
-  try { apply(await api(path, body)); showError(""); }
-  catch (error) { showError(error.message); }
-  finally { button.disabled = false; }
+  try {
+    const data = await api(path, body);
+    apply(data);
+    showError("");
+    return data;
+  } catch (error) {
+    showError(error.message);
+    throw error;
+  } finally {
+    button.disabled = false;
+  }
 }
 
+// ---- permanent -----------------------------------------------------------
+
+function closeSetup() {
+  editing = false;
+  zonesLoaded = false;
+  $("perm-conflict").hidden = true;
+  $("perm-token").value = "";
+  if (state) renderPermanent(state.permanent);
+}
+
+$("perm-connect").addEventListener("click", async () => {
+  const data = await act($("perm-connect"), "/api/permanent/zones", { token: $("perm-token").value }).catch(() => null);
+  if (!data) return;
+  if (!data.zones.length) return showError("This token can't see any active domains. Check its Zone Resources.");
+  const select = $("perm-zone");
+  select.replaceChildren(...data.zones.map((z) => new Option(z.name, z.id)));
+  const current = state.permanent.hostname;
+  const match = current && data.zones.find((z) => current.endsWith("." + z.name));
+  if (match) {
+    select.value = match.id;
+    $("perm-subdomain").value = current.slice(0, -(match.name.length + 1));
+  }
+  zonesLoaded = true;
+  renderPermanent(state.permanent);
+});
+
+async function setup(button, replace) {
+  $("perm-conflict").hidden = true;
+  try {
+    await act(button, "/api/permanent/setup", {
+      token: $("perm-token").value,
+      zone_id: $("perm-zone").value,
+      subdomain: $("perm-subdomain").value,
+      remember: $("perm-remember").checked,
+      replace,
+    });
+    closeSetup();
+  } catch (error) {
+    if (error.data && error.data.conflict) {
+      showError("");
+      const host = `${$("perm-subdomain").value.trim().toLowerCase()}.${$("perm-zone").selectedOptions[0].text}`;
+      $("perm-conflict-host").textContent = host;
+      $("perm-conflict-list").replaceChildren(...error.data.conflict.map((r) => {
+        const li = document.createElement("li");
+        li.textContent = `${r.type} → ${r.content}`;
+        return li;
+      }));
+      $("perm-conflict").hidden = false;
+    }
+  }
+}
+
+$("perm-setup-go").addEventListener("click", () => setup($("perm-setup-go"), false));
+$("perm-replace").addEventListener("click", () => setup($("perm-replace"), true));
+$("perm-setup-cancel").addEventListener("click", closeSetup);
+$("perm-change").addEventListener("click", () => { editing = true; renderPermanent(state.permanent); });
+$("perm-forget").addEventListener("click", () => act($("perm-forget"), "/api/permanent/forget-token", {}).catch(() => {}));
+$("perm-remove").addEventListener("click", () => { $("perm-remove-confirm").hidden = false; });
+$("perm-remove-no").addEventListener("click", () => { $("perm-remove-confirm").hidden = true; });
+$("perm-remove-yes").addEventListener("click", async () => {
+  await act($("perm-remove-yes"), "/api/permanent/remove", { token: $("perm-remove-token").value }).catch(() => null);
+  if (!state.permanent.configured) {
+    $("perm-remove-confirm").hidden = true;
+    $("perm-remove-token").value = "";
+  }
+});
+
+// ---- temporary -------------------------------------------------------------
+
 async function copyUrl() {
-  const text = $("url").textContent;
+  const text = $("quick-url").textContent;
   try {
     await navigator.clipboard.writeText(text);
   } catch {
@@ -169,18 +382,18 @@ async function copyUrl() {
     document.execCommand("copy");
     area.remove();
   }
-  $("copy").textContent = "Copied";
-  setTimeout(() => { $("copy").textContent = "Copy"; }, 1500);
+  $("quick-copy").textContent = "Copied";
+  setTimeout(() => { $("quick-copy").textContent = "Copy"; }, 1500);
 }
 
-$("start").addEventListener("click", () => {
-  const value = $("duration").value;
-  act($("start"), "/api/start", { duration: value ? Number(value) : null });
+$("quick-start").addEventListener("click", () => {
+  const value = $("quick-duration").value;
+  act($("quick-start"), "/api/quick/start", { duration: value ? Number(value) : null }).catch(() => {});
 });
-$("stop").addEventListener("click", () => act($("stop"), "/api/stop", {}));
-$("cancel").addEventListener("click", () => act($("cancel"), "/api/stop", {}));
-$("recheck").addEventListener("click", () => act($("recheck"), "/api/recheck", {}));
-$("copy").addEventListener("click", copyUrl);
+$("quick-stop").addEventListener("click", () => act($("quick-stop"), "/api/quick/stop", {}).catch(() => {}));
+$("quick-cancel").addEventListener("click", () => act($("quick-cancel"), "/api/quick/stop", {}).catch(() => {}));
+$("quick-copy").addEventListener("click", copyUrl);
+$("recheck").addEventListener("click", () => act($("recheck"), "/api/recheck", {}).catch(() => {}));
 
 refresh();
 setInterval(refresh, 2000);
