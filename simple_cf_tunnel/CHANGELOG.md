@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2
+
+- The trusted proxy fix no longer confirms the change itself. Confirm it in
+  Home Assistant's own "Confirm new HTTP server configuration" dialog after
+  the restart. This fixes the "No pending HTTP config to promote" error when
+  both tried to confirm.
+
 ## 0.3.1
 
 - Installs and updates now download a prebuilt image instead of building the
