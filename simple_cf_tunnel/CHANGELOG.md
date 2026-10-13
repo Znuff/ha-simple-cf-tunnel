@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.3
+
+- Removed the warning about the URL being public from the Temporary access
+  section.
+
 ## 0.3.2
 
 - The trusted proxy fix no longer confirms the change itself. Confirm it in
