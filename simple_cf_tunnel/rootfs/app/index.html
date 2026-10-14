@@ -5,21 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cloudflare Tunnel</title>
 <style>
+  /* Defaults for outside Home Assistant; inside it, applyHaTheme() replaces these with the theme's. */
   :root {
     --bg: #f6f7f9; --card: #ffffff; --text: #1c1f23; --muted: #5f6670; --border: #dde1e6;
-    --accent: #f38020; --accent-text: #ffffff; --warn-bg: #fff4e5; --warn-border: #f0b46a;
-    --bad-bg: #fdecec; --bad-border: #e8a0a0; --ok: #2e7d32; --bad: #c62828;
+    --accent: #f38020; --accent-text: #ffffff; --warn: #e8a33d; --ok: #2e7d32; --bad: #c62828;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    /* Box tints derive from the warning/error colours, so a theme recolours them too. */
+    --warn-bg: color-mix(in srgb, var(--warn) 12%, var(--card));
+    --warn-border: color-mix(in srgb, var(--warn) 60%, var(--card));
+    --bad-bg: color-mix(in srgb, var(--bad) 10%, var(--card));
+    --bad-border: color-mix(in srgb, var(--bad) 50%, var(--card));
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #111315; --card: #1c1f23; --text: #e8eaed; --muted: #9aa0a6; --border: #33373d;
-      --warn-bg: #2d2416; --warn-border: #8a6326; --bad-bg: #2d1a1a; --bad-border: #8a3a3a;
       --ok: #81c784; --bad: #ef9a9a;
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); }
   main { max-width: 640px; margin: 0 auto; padding: 24px 16px; }
   h1 { font-size: 22px; margin: 0 0 16px; }
   h2 { font-size: 18px; margin: 0 0 4px; }
@@ -225,6 +229,52 @@
 <script>
 const BASE = __INGRESS_PATH__;
 const $ = (id) => document.getElementById(id);
+
+// ---- Home Assistant theme -----------------------------------------------------
+// This panel is a same-origin Ingress iframe, so it can read the theme's CSS variables
+// from Home Assistant's page. Our colour on the left, theirs on the right (first one set wins).
+const HA_THEME = {
+  "--bg": ["--primary-background-color"],
+  "--card": ["--card-background-color", "--ha-card-background"],
+  "--text": ["--primary-text-color"],
+  "--muted": ["--secondary-text-color"],
+  "--border": ["--divider-color"],
+  "--accent": ["--primary-color"],
+  "--accent-text": ["--text-primary-color"],
+  "--warn": ["--warning-color"],
+  "--ok": ["--success-color"],
+  "--bad": ["--error-color"],
+  "--font": ["--ha-font-family-body", "--paper-font-body1_-_font-family"],
+};
+
+function haRoot() {
+  try {
+    return window.parent !== window ? window.parent.document.documentElement : null;
+  } catch {
+    return null;  // not inside Home Assistant's frame
+  }
+}
+
+function applyHaTheme() {
+  const root = haRoot();
+  if (!root) return;
+  const theirs = getComputedStyle(root);
+  const ours = document.documentElement.style;
+  for (const [name, sources] of Object.entries(HA_THEME)) {
+    const value = sources.map((source) => theirs.getPropertyValue(source).trim()).find(Boolean);
+    if (value) ours.setProperty(name, value);
+    else ours.removeProperty(name);  // fall back to our default
+  }
+  // HA signals dark mode with this meta tag; native controls (checkboxes, dropdowns) follow it.
+  const scheme = root.ownerDocument.querySelector("meta[name=color-scheme]");
+  ours.colorScheme = (scheme && scheme.getAttribute("content")) || "";
+}
+
+applyHaTheme();
+if (haRoot()) {
+  // Home Assistant restyles its root element when the theme or dark mode changes.
+  new MutationObserver(applyHaTheme).observe(haRoot(), { attributes: true, attributeFilter: ["style", "class"] });
+}
 let state = null;
 let clockOffset = 0;
 let editing = false;      // the permanent setup form is open on an active tunnel

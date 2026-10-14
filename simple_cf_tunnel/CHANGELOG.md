@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.0
+
+- The panel now uses your Home Assistant theme: its colours, accent, font
+  and light or dark mode, and follows along when you switch themes.
+
 ## 0.4.5
 
 - The AppArmor profile is now enforced: the add-on can only do what it
