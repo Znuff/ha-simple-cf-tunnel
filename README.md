@@ -1,5 +1,7 @@
 # Simple Cloudflare Tunnel for Home Assistant
 
+<p align="center"><img src="simple_cf_tunnel/logo.png" alt="Simple Cloudflare Tunnel logo" width="400"></p>
+
 A Home Assistant add-on that exposes Home Assistant through Cloudflare, without
 opening ports. Everything is set up from its sidebar panel:
 
