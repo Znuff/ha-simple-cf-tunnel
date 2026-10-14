@@ -19,11 +19,10 @@ Both can run at the same time.
   - Account → Cloudflare Tunnel → Edit
   - Zone → Zone → Read
   - Zone → DNS → Edit
+  - Zone → Zone WAF → Edit (to limit access by country)
 
   The panel has a link that pre-fills the token form. You can limit the
   token's Zone Resources to the one domain you'll use.
-
-  To limit access by country, also add Zone → Zone WAF → Edit.
 
 ### Set up
 

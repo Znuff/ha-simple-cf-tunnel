@@ -29,6 +29,7 @@ TOKEN_URL = "https://dash.cloudflare.com/profile/api-tokens?" + urllib.parse.url
         {"key": "argotunnel", "type": "edit"},
         {"key": "zone", "type": "read"},
         {"key": "dns", "type": "edit"},
+        {"key": "zone_waf", "type": "edit"},
     ], separators=(",", ":")),
     "accountId": "*",
     "zoneId": "all",

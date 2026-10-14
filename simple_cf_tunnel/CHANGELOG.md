@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.3
+
+- The "Create a Cloudflare API token" link now also pre-fills the Zone WAF →
+  Edit permission needed to limit access by country.
+
 ## 0.4.2
 
 - Added an AppArmor profile, in complain mode for now: it blocks nothing yet,
