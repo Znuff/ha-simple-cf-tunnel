@@ -372,6 +372,25 @@ async function restartDone() {
   try { apply(await api("/api/recheck", {})); } catch { /* the next refresh reports it */ }
   showNotice("Home Assistant is back. Confirm the new settings in its \"Confirm new HTTP server configuration\" "
     + "dialog, or it reverts them within 5 minutes.");
+  waitForConfirm();
+}
+
+// Hides the "confirm" notice once HA has no change awaiting confirmation: confirmed, or reverted.
+function waitForConfirm() {
+  const started = Date.now();
+  const timer = setInterval(async () => {
+    if (Date.now() - started > (RESTART_TIMEOUT + 60) * 1000) return clearInterval(timer);
+    let current;
+    try {
+      current = await haConnection.sendMessagePromise({ type: "http/config" });
+    } catch {
+      return;  // still reconnecting to the restarted Home Assistant
+    }
+    if (current.pending && !current.pending.error) return;
+    clearInterval(timer);
+    showNotice("");
+    try { apply(await api("/api/recheck", {})); } catch { /* the next refresh reports it */ }
+  }, 2000);
 }
 
 function restartTick() {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.4
+
+- The "confirm the new settings" reminder after the trusted proxy fix now
+  goes away on its own once you confirm them in Home Assistant's dialog (or
+  Home Assistant reverts them).
+- Added a logo and icon.
+
 ## 0.4.3
 
 - The "Create a Cloudflare API token" link now also pre-fills the Zone WAF →
