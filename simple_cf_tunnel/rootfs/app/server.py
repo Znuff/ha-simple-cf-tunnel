@@ -132,8 +132,19 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+def apparmor_label():
+    """This process's AppArmor confinement, such as "<slug> (enforce)"."""
+    for path in ("/proc/self/attr/apparmor/current", "/proc/self/attr/current"):
+        try:
+            return pathlib.Path(path).read_text(encoding="utf-8").strip("\x00\n ")
+        except OSError:
+            continue
+    return "unavailable"
+
+
 def main():
     global QUICK, PERMANENT
+    log(f"AppArmor: {apparmor_label()}")
     # A previous controller that crashed may have left its cloudflared processes behind.
     subprocess.run(["pkill", "-x", "cloudflared"], check=False)
     QUICK, PERMANENT = QuickTunnel(), Permanent()

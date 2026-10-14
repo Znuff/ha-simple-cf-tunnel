@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.5
+
+- The AppArmor profile is now enforced: the add-on can only do what it
+  needs, and its security rating is 8.
+- The add-on log shows the AppArmor confinement at startup, such as
+  `AppArmor: <slug>_simple_cf_tunnel (enforce)`.
+
 ## 0.4.4
 
 - The "confirm the new settings" reminder after the trusted proxy fix now

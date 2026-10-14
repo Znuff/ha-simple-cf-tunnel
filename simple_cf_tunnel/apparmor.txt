@@ -1,8 +1,8 @@
 #include <tunables/global>
 
-# In complain mode for now: nothing is blocked, and anything the rules below don't
-# allow is logged as apparmor="ALLOWED". Remove `complain` once the log stays clean.
-profile simple_cf_tunnel flags=(attach_disconnected,mediate_deleted,complain) {
+# Anything the rules below don't allow is blocked and logged as apparmor="DENIED".
+# To find missing rules, add `complain` to the flags: it then logs apparmor="ALLOWED" instead.
+profile simple_cf_tunnel flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
 
   # Capabilities
