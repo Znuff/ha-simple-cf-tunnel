@@ -19,6 +19,8 @@ from proc import log, pump, terminate
 STATE_FILE = pathlib.Path("/data/state.json")
 METRICS_ADDR = "127.0.0.1:36500"
 SUBDOMAIN = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$")
+COUNTRY = re.compile(r"^[A-Z]{2}$")
+FIREWALL_PHASE = "http_request_firewall_custom"
 
 # Pre-fills Cloudflare's "Create API token" form. The UI also lists these in words,
 # in case the dashboard doesn't recognise a key.
@@ -124,6 +126,7 @@ class Permanent:
             "connected": configured and self.runner.connected(),
             "last_exit": self.runner.last_exit,
             "token_saved": bool(state.get("api_token")),
+            "countries": state.get("countries", []),
             "origin_changed": bool(
                 configured and self.current_origin and self.current_origin != state.get("origin")
             ),
@@ -149,16 +152,24 @@ class Permanent:
         zones = cf.call("GET", "/zones", params={"status": "active", "per_page": 50})
         return [{"id": z["id"], "name": z["name"]} for z in zones]
 
-    def setup(self, supplied_token, zone_id, subdomain, remember, replace):
+    def setup(self, supplied_token, zone_id, subdomain, countries, remember, replace):
         subdomain = (subdomain or "").strip().lower()
         if not SUBDOMAIN.match(subdomain):
             raise ValueError("Enter a subdomain such as ha or home.lab")
+        countries = _countries(countries)
         with self.lock:
             cf = self.api(supplied_token)
             zone = cf.call("GET", f"/zones/{zone_id}")
             account_id, hostname = zone["account"]["id"], f"{subdomain}.{zone['name']}"
             origin, uses_tls = ha.origin()
             state, tag = self.state, self._tag()
+
+            # Only touch the firewall when countries are or were in use, so tokens
+            # without the WAF permission keep working. Done first: a missing permission
+            # fails before anything else changes.
+            had_countries = bool(state.get("countries"))
+            if countries or had_countries:
+                self._ensure_country_rule(cf, zone_id, hostname, countries)
 
             tunnel_id = self._ensure_tunnel(cf, account_id)
             state.update(account_id=account_id, tunnel_id=tunnel_id)
@@ -175,9 +186,11 @@ class Permanent:
             old_zone, old_record = state.get("zone_id"), state.get("dns_record_id")
             if old_record and (old_zone, old_record) != (zone_id, record_id):
                 self._delete_own_record(cf, old_zone, old_record)  # hostname changed: new record exists first
+            if had_countries and old_zone and old_zone != zone_id:
+                self._ensure_country_rule(cf, old_zone, None, [])
 
             state.update(zone_id=zone_id, hostname=hostname, dns_record_id=record_id,
-                         tunnel_token=run_token, origin=origin)
+                         tunnel_token=run_token, origin=origin, countries=countries)
             if remember:
                 state["api_token"] = cf.token
             else:
@@ -191,6 +204,8 @@ class Permanent:
         with self.lock:
             cf = self.api(supplied_token)
             state = self.state
+            if state.get("countries"):
+                self._ensure_country_rule(cf, state["zone_id"], None, [])
             if state.get("dns_record_id"):
                 self._delete_own_record(cf, state["zone_id"], state["dns_record_id"])
             self.runner.stop()
@@ -241,6 +256,43 @@ class Permanent:
             return cf.call("PUT", f"/zones/{zone_id}/dns_records/{ours[0]['id']}", body)["id"]
         return cf.call("POST", f"/zones/{zone_id}/dns_records", body)["id"]
 
+    def _ensure_country_rule(self, cf, zone_id, hostname, countries):
+        """Block the hostname for visitors outside `countries`; no countries deletes the rule.
+
+        The rule lives in the zone's custom firewall rules, next to the user's own,
+        and is recognised by the install's tag as its description.
+        """
+        entrypoint = f"/zones/{zone_id}/rulesets/phases/{FIREWALL_PHASE}/entrypoint"
+        try:
+            try:
+                ruleset = cf.call("GET", entrypoint)
+            except CloudflareError as error:
+                if error.status != 404:
+                    raise
+                ruleset = None  # the zone has no custom rules yet
+            ours = [r for r in (ruleset or {}).get("rules") or [] if r.get("description") == self._tag()]
+            rule = None
+            if countries:
+                allowed = " ".join(f'"{c}"' for c in countries)
+                rule = {"description": self._tag(), "action": "block", "enabled": True,
+                        "expression": f'(http.host eq "{hostname}" and not ip.src.country in {{{allowed}}})'}
+            rules = f"/zones/{zone_id}/rulesets/{ruleset['id']}/rules" if ruleset else None
+            for extra in ours[1 if rule else 0:]:
+                cf.call("DELETE", f"{rules}/{extra['id']}")
+            if not rule:
+                return
+            if ours:
+                cf.call("PATCH", f"{rules}/{ours[0]['id']}", rule)
+            elif ruleset:
+                cf.call("POST", rules, rule)
+            else:
+                cf.call("PUT", entrypoint, {"rules": [rule]})
+        except CloudflareError as error:
+            if error.status in (401, 403):
+                raise CloudflareError(error.status, "Limiting countries needs the Zone → Zone WAF → Edit "
+                                                    f"permission on the API token ({error})") from error
+            raise
+
     def _delete_own_record(self, cf, zone_id, record_id):
         """Delete a DNS record only if it still carries this install's tag."""
         try:
@@ -265,6 +317,17 @@ class Permanent:
         tmp.write_text(json.dumps(self.state, indent=2), encoding="utf-8")
         os.chmod(tmp, 0o600)
         os.replace(tmp, STATE_FILE)
+
+
+def _countries(values):
+    """Validate a list of ISO 3166 country codes; returns them uppercased, sorted and unique."""
+    if not isinstance(values, list):
+        raise ValueError("Countries must be a list")
+    codes = sorted({str(v).strip().upper() for v in values})
+    bad = [c for c in codes if not COUNTRY.match(c)]
+    if bad:
+        raise ValueError(f"Not a country code: {', '.join(bad)}")
+    return codes
 
 
 def _ignore_missing(fn, *args):

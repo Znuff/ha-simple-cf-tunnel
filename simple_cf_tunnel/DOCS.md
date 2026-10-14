@@ -23,12 +23,15 @@ Both can run at the same time.
   The panel has a link that pre-fills the token form. You can limit the
   token's Zone Resources to the one domain you'll use.
 
+  To limit access by country, also add Zone → Zone WAF → Edit.
+
 ### Set up
 
 1. Create the token and paste it into the panel, then click
    **Load my domains**.
 2. Pick the domain and type a subdomain (default `ha`).
-3. Click **Set up**.
+3. Optionally, pick the countries allowed to reach it (see below).
+4. Click **Set up**.
 
 The add-on creates a tunnel named `ha-<id>`, points it at Home Assistant, and
 creates a proxied DNS record for your hostname. Your Home Assistant port and
@@ -36,6 +39,33 @@ TLS setting are detected automatically.
 
 If the hostname already has DNS records, the add-on shows them and only
 replaces them after you confirm.
+
+### Limit access by country
+
+Under **Allow access only from these countries**, type a country name or
+code and press Enter, or pick it from the suggestions. Leave the list empty to
+allow every country.
+
+With countries picked, the add-on creates a Cloudflare WAF custom rule on your
+domain that blocks requests to your hostname from anywhere else. Cloudflare
+blocks them at its edge, before they reach the tunnel. The rule's description
+is the same `managed-by: simple-cf-tunnel/<id>` tag as the DNS record, and the
+add-on leaves your own custom rules alone. Cloudflare's free plan allows 5
+custom rules per domain; this uses one.
+
+This is a simple filter, not a replacement for a strong password: a visitor
+using a VPN in an allowed country gets through. It also blocks you, and the
+companion app, when you travel to a country that isn't on the list, so add
+those countries before you go.
+
+The country is Cloudflare's guess from the visitor's IP address. It only
+applies to permanent access: temporary `trycloudflare.com` URLs can't be
+limited.
+
+To change the list, use **Change or repair** and run setup again. This needs
+the Zone WAF permission on the token. If you saved a token without it, add the
+permission to that token in the Cloudflare dashboard; the token value stays
+the same.
 
 ### The API token
 
@@ -54,7 +84,7 @@ add-on's data, which is included in Home Assistant backups.
   This also fixes a tunnel or DNS record deleted in the Cloudflare dashboard,
   and updates the tunnel after you change Home Assistant's port or TLS
   setting (the panel tells you when that happens).
-- **Remove:** deletes the tunnel and the DNS record. Press it before
+- **Remove:** deletes the tunnel, the DNS record and the country rule. Press it before
   uninstalling the add-on, otherwise the tunnel stays in your Cloudflare
   account.
 

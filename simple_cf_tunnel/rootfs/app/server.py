@@ -57,7 +57,7 @@ def post_action(path, body):
     elif path == "/api/permanent/setup":
         threading.Thread(target=recheck_proxy, daemon=True).start()
         PERMANENT.setup(body.get("token"), body.get("zone_id"), body.get("subdomain"),
-                        bool(body.get("remember")), bool(body.get("replace")))
+                        body.get("countries") or [], bool(body.get("remember")), bool(body.get("replace")))
     elif path == "/api/permanent/remove":
         PERMANENT.remove(body.get("token"))
     elif path == "/api/permanent/forget-token":

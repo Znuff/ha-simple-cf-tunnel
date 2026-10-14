@@ -49,6 +49,11 @@
   .status.ok { color: var(--ok); } .status.bad { color: var(--bad); }
   .muted { color: var(--muted); }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .chips:empty { display: none; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border-radius: 999px;
+          border: 1px solid var(--border); background: var(--bg); }
+  .chip button { padding: 0 6px; border: 0; background: none; font-weight: 400; color: var(--muted); }
   hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
   a { color: var(--accent); }
   [hidden] { display: none !important; }
@@ -87,6 +92,7 @@
     <div id="perm-active" hidden>
       <p id="perm-status" class="status"></p>
       <div class="url"><a id="perm-url" target="_blank" rel="noopener noreferrer"></a></div>
+      <p id="perm-countries-status" class="muted"></p>
       <div id="perm-origin-changed" class="note" hidden>
         <p>Home Assistant's port or TLS setting changed since setup. Run setup again to update the tunnel.</p>
       </div>
@@ -118,6 +124,7 @@
             <li>Zone → Zone → Read</li>
             <li>Zone → DNS → Edit</li>
           </ul>
+          <p>To limit access to some countries, also add Zone → Zone WAF → Edit.</p>
           <p>You can limit Zone Resources to the one domain you'll use.</p>
         </div>
         <div class="field">
@@ -137,6 +144,16 @@
             <span>.</span>
             <select id="perm-zone" aria-label="Domain"></select>
           </div>
+        </div>
+        <div class="field">
+          <label for="perm-country">Allow access only from these countries</label>
+          <div id="perm-countries" class="chips"></div>
+          <input id="perm-country" type="text" list="country-list" placeholder="Type a country, then Enter"
+                 autocomplete="off" spellcheck="false">
+          <datalist id="country-list"></datalist>
+          <p class="muted">Leave empty to allow every country. Cloudflare blocks everyone else before they
+            reach Home Assistant, including you when travelling. Needs the Zone WAF permission.
+            Temporary access isn't limited.</p>
         </div>
         <div class="field">
           <label class="check"><input id="perm-remember" type="checkbox">
@@ -201,6 +218,20 @@ let state = null;
 let clockOffset = 0;
 let editing = false;      // the permanent setup form is open on an active tunnel
 let zonesLoaded = false;
+let countries = new Set(); // ISO codes chosen in the setup form
+
+// ISO 3166-1 alpha-2; the browser supplies the names.
+const COUNTRY_CODES = ("AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ " +
+  "BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER " +
+  "ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM " +
+  "IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF " +
+  "MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK " +
+  "PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD " +
+  "TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW").split(" ");
+const regionNames = (() => {
+  try { return new Intl.DisplayNames(undefined, { type: "region" }); } catch { return null; }
+})();
+const countryName = (code) => (regionNames && regionNames.of(code)) || code;
 
 async function api(path, body) {
   const options = body === undefined ? {} : {
@@ -261,6 +292,9 @@ function renderPermanent(p) {
     $("perm-status").textContent = p.connected ? "Connected"
       : p.last_exit ? `Not connected: ${p.last_exit}` : "Connecting…";
     $("perm-origin-changed").hidden = !p.origin_changed;
+    $("perm-countries-status").textContent = p.countries.length
+      ? `Only reachable from: ${p.countries.map(countryName).join(", ")}.`
+      : "Reachable from every country.";
   }
 }
 
@@ -311,6 +345,45 @@ async function act(button, path, body) {
 
 // ---- permanent -----------------------------------------------------------
 
+function renderCountries() {
+  $("perm-countries").replaceChildren(...[...countries].sort().map((code) => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = countryName(code);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "×";
+    remove.setAttribute("aria-label", `Remove ${countryName(code)}`);
+    remove.addEventListener("click", () => { countries.delete(code); renderCountries(); });
+    chip.append(remove);
+    return chip;
+  }));
+}
+
+// Accepts a datalist entry ("Romania (RO)"), a code ("ro") or a name ("romania").
+function addCountry() {
+  const text = $("perm-country").value.trim();
+  if (!text) return;
+  const lower = text.toLowerCase();
+  const tail = text.match(/\(([A-Za-z]{2})\)$/);
+  const code = tail ? tail[1].toUpperCase()
+    : COUNTRY_CODES.find((c) => c.toLowerCase() === lower || countryName(c).toLowerCase() === lower);
+  if (!code || !COUNTRY_CODES.includes(code)) return showError(`Unknown country: ${text}`);
+  showError("");
+  countries.add(code);
+  $("perm-country").value = "";
+  renderCountries();
+}
+
+$("country-list").replaceChildren(...COUNTRY_CODES.map((c) => new Option(`${countryName(c)} (${c})`)));
+$("perm-country").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); addCountry(); }
+});
+// Picking a datalist entry fires "input" with the full value; typing never ends in "(XX)".
+$("perm-country").addEventListener("input", () => {
+  if (/\([A-Z]{2}\)$/.test($("perm-country").value)) addCountry();
+});
+
 function closeSetup() {
   editing = false;
   zonesLoaded = false;
@@ -331,6 +404,8 @@ $("perm-connect").addEventListener("click", async () => {
     select.value = match.id;
     $("perm-subdomain").value = current.slice(0, -(match.name.length + 1));
   }
+  countries = new Set(state.permanent.countries);
+  renderCountries();
   zonesLoaded = true;
   renderPermanent(state.permanent);
 });
@@ -342,6 +417,7 @@ async function setup(button, replace) {
       token: $("perm-token").value,
       zone_id: $("perm-zone").value,
       subdomain: $("perm-subdomain").value,
+      countries: [...countries],
       remember: $("perm-remember").checked,
       replace,
     });

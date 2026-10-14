@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Permanent access can be limited to the countries you pick. Cloudflare
+  blocks visitors from anywhere else before they reach Home Assistant. Leave
+  the list empty to allow every country. This needs the Zone → Zone WAF →
+  Edit permission on the API token.
+
 ## 0.3.3
 
 - Removed the warning about the URL being public from the Temporary access
