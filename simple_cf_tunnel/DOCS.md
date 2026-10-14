@@ -123,7 +123,8 @@ own Home Assistant login (the panel runs inside Home Assistant), so the add-on
 itself needs no extra permissions. It keeps your other HTTP settings, adds
 `172.30.33.0/24` as a trusted proxy, and Home Assistant restarts.
 
-After the restart, Home Assistant shows a "Confirm new HTTP server
+The panel shows a progress bar while Home Assistant restarts and updates on
+its own when it's back. After the restart, Home Assistant shows a "Confirm new HTTP server
 configuration" dialog. Click **Confirm** to keep the change. If you don't
 confirm within 5 minutes, Home Assistant reverts it on its own.
 

@@ -1,5 +1,5 @@
 name: Simple Cloudflare Tunnel
-version: "0.4.0"
+version: "0.4.1"
 slug: simple_cf_tunnel
 image: ghcr.io/znuff/{arch}-simple-cf-tunnel
 description: >-

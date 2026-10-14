@@ -56,6 +56,10 @@
   .chip button { padding: 0 6px; border: 0; background: none; font-weight: 400; color: var(--muted); }
   hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
   a { color: var(--accent); }
+  .progress { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; margin: 4px 0 8px; }
+  .progress div { width: 30%; height: 100%; background: var(--accent); animation: slide 1.4s ease-in-out infinite; }
+  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+  @media (prefers-reduced-motion: reduce) { .progress div { width: 100%; animation: none; } }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -79,6 +83,13 @@
         within 5 minutes, Home Assistant reverts them on its own.</p>
       <button id="proxy-fix" class="primary" type="button">Fix it for me (restarts Home Assistant)</button>
     </div>
+  </div>
+
+  <div id="restarting" class="note" role="status" hidden>
+    <p><strong>Home Assistant is restarting…</strong> This usually takes a minute or two.
+      This page updates on its own when it's back.</p>
+    <div class="progress"><div></div></div>
+    <p id="restarting-elapsed" class="muted"></p>
   </div>
 
   <div id="notice" class="note" hidden></div>
@@ -262,7 +273,7 @@ function showNotice(message) {
 function apply(data) {
   state = data;
   clockOffset = data.now - Date.now() / 1000;
-  $("proxy-warning").hidden = data.proxy_trusted !== false;
+  $("proxy-warning").hidden = data.proxy_trusted !== false || Boolean(restart);
   $("proxy-fix-box").hidden = !(haConnection && data.ha_port);
   renderPermanent(data.permanent);
   renderQuick(data.quick);
@@ -324,8 +335,56 @@ function tick() {
 }
 
 async function refresh() {
-  try { apply(await api("/api/state")); }
-  catch (error) { showError(`Can't reach the add-on: ${error.message}`); }
+  let data;
+  try {
+    data = await api("/api/state");
+  } catch (error) {
+    // While HA restarts, the Ingress proxy (part of HA) is down too: expected, not an error.
+    if (restart) restart.wentDown = true;
+    else showError(`Can't reach the add-on: ${error.message}`);
+    return;
+  }
+  if (restart && restart.wentDown) return restartDone();
+  apply(data);
+}
+
+// ---- waiting for the Home Assistant restart started by "Fix it for me" ----------
+
+const RESTART_TIMEOUT = 300;  // seconds; HA also reverts an unconfirmed HTTP config after 5 minutes
+let restart = null;           // { started, wentDown }
+
+function startRestartWait() {
+  restart = { started: Date.now(), wentDown: false };
+  showError("");
+  showNotice("");
+  $("restarting").hidden = false;
+  if (state) apply(state);
+  restartTick();
+}
+
+function stopRestartWait() {
+  restart = null;
+  $("restarting").hidden = true;
+}
+
+async function restartDone() {
+  stopRestartWait();
+  try { apply(await api("/api/recheck", {})); } catch { /* the next refresh reports it */ }
+  showNotice("Home Assistant is back. Confirm the new settings in its \"Confirm new HTTP server configuration\" "
+    + "dialog, or it reverts them within 5 minutes.");
+}
+
+function restartTick() {
+  if (!restart) return;
+  const elapsed = Math.round((Date.now() - restart.started) / 1000);
+  if (elapsed >= RESTART_TIMEOUT) {
+    stopRestartWait();
+    if (state) apply(state);
+    return showError("Home Assistant hasn't come back after 5 minutes. Check it in another tab, then reload this page.");
+  }
+  $("restarting-elapsed").textContent = restart.wentDown
+    ? `Waiting for Home Assistant to come back… ${elapsed}s`
+    : `Waiting for Home Assistant to stop… ${elapsed}s`;
 }
 
 async function act(button, path, body) {
@@ -487,6 +546,7 @@ $("recheck").addEventListener("click", () => act($("recheck"), "/api/recheck", {
 // and reverts it after 5 minutes otherwise; confirming is left to HA's own dialog.
 
 const ADDON_SUBNET = "172.30.33.0/24";
+const ERR_CONNECTION_LOST = 3;  // home-assistant-js-websocket's error code
 let haConnection = null;
 
 async function findHaConnection() {
@@ -520,9 +580,14 @@ $("proxy-fix").addEventListener("click", async () => {
     config.use_x_forwarded_for = true;
     config.trusted_proxies = [...new Set([...(config.trusted_proxies || []), ADDON_SUBNET])];
 
-    await haConnection.sendMessagePromise({ type: "http/config/configure", config });
-    showError("");
-    showNotice("Home Assistant is restarting. Confirm the new settings in the dialog it shows afterwards.");
+    try {
+      await haConnection.sendMessagePromise({ type: "http/config/configure", config });
+    } catch (error) {
+      // HA may restart before it answers; the websocket client then rejects with "connection lost",
+      // as { error: { code: 3 } } for a sent command.
+      if (!(error && error.error && error.error.code === ERR_CONNECTION_LOST)) throw error;
+    }
+    startRestartWait();
   } catch (error) {
     showError(`Couldn't change the setting: ${describe(error)}`);
   } finally {
@@ -537,7 +602,7 @@ $("proxy-fix").addEventListener("click", async () => {
   catch { await refresh(); }
 })();
 setInterval(refresh, 2000);
-setInterval(tick, 1000);
+setInterval(() => { tick(); restartTick(); }, 1000);
 </script>
 </body>
 </html>

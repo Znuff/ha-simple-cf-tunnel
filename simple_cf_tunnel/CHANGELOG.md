@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+- After **Fix it for me**, the panel shows that Home Assistant is restarting
+  and waits for it to come back, instead of showing "Can't reach the add-on:
+  Failed to fetch". It then reminds you to confirm the new settings.
+
 ## 0.4.0
 
 - Permanent access can be limited to the countries you pick. Cloudflare
