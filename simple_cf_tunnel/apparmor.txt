@@ -1,0 +1,39 @@
+#include <tunables/global>
+
+# In complain mode for now: nothing is blocked, and anything the rules below don't
+# allow is logged as apparmor="ALLOWED". Remove `complain` once the log stays clean.
+profile simple_cf_tunnel flags=(attach_disconnected,mediate_deleted,complain) {
+  #include <abstractions/base>
+
+  # Capabilities
+  file,
+  signal (send) set=(kill,term,int,hup,cont),
+
+  # Network: Cloudflare's edge (HTTP/2 over TCP, QUIC over UDP), DNS, Supervisor, Home Assistant
+  network inet stream,
+  network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+  network netlink raw,
+
+  # S6-Overlay
+  /init ix,
+  /bin/** ix,
+  /usr/bin/** ix,
+  /run/{s6,s6-rc*,service}/** ix,
+  /package/** ix,
+  /command/** ix,
+  /etc/s6-overlay/** rwix,
+  /run/{,**} rwk,
+  /dev/tty rw,
+
+  # Bashio
+  /usr/lib/bashio/** ix,
+  /tmp/** rwk,
+
+  # Controller (python3 from /usr/bin) and cloudflared (/usr/bin/cloudflared)
+  /app/** r,
+
+  # State: tunnel run token, optional API token
+  /data/** rw,
+}

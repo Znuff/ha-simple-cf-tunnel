@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2
+
+- Added an AppArmor profile, in complain mode for now: it blocks nothing yet,
+  and only logs what it would block. Once it's tuned, it will be enforced
+  and raise the add-on's security rating from 7 to 8.
+
 ## 0.4.1
 
 - After **Fix it for me**, the panel shows that Home Assistant is restarting
