@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0.20261116
+
+- Updated cloudflared to 2026.11.0.
+
 ## 0.5.0
 
 - The panel now uses your Home Assistant theme: its colours, accent, font
