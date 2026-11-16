@@ -1,0 +1,87 @@
+name: Update cloudflared
+
+# Weekly (Mondays): if Cloudflare published a new cloudflared, pin it, release the add-on
+# as <version>.<YYYYMMDD> with a changelog entry, and build it.
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: cloudflared-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DOCKERFILE: simple_cf_tunnel/Dockerfile
+      CONFIG: simple_cf_tunnel/config.yaml
+      CHANGELOG: simple_cf_tunnel/CHANGELOG.md
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Compare versions
+        id: check
+        run: |
+          latest=$(gh api repos/cloudflare/cloudflared/releases/latest --jq .tag_name)
+          if ! [[ "$latest" =~ ^[0-9]{4}\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Unexpected cloudflared tag: '$latest'" >&2
+            exit 1
+          fi
+          current=$(sed -nE 's/^ARG CLOUDFLARED_VERSION="([^"]+)"/\1/p' "$DOCKERFILE")
+          echo "current=$current latest=$latest"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          if [ "$current" = "$latest" ]; then
+            echo "update=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "update=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump cloudflared, add-on version and changelog
+        if: steps.check.outputs.update == 'true'
+        env:
+          LATEST: ${{ steps.check.outputs.latest }}
+        run: |
+          sed -i -E "s/^ARG CLOUDFLARED_VERSION=\".*\"/ARG CLOUDFLARED_VERSION=\"$LATEST\"/" "$DOCKERFILE"
+
+          # 0.5.0 -> 0.5.0.20261116. A 4th dot section, not "-20261116": HA
+          # (AwesomeVersion) ranks a "-suffix" as a pre-release, below 0.5.0,
+          # so the update would never show.
+          old=$(sed -nE 's/^version: "([^"]+)"/\1/p' "$CONFIG")
+          new="$(echo "$old" | cut -d. -f1-3).$(date -u +%Y%m%d)"
+          sed -i -E "s/^version: \".*\"/version: \"$new\"/" "$CONFIG"
+
+          # Insert the new entry right after the "# Changelog" heading.
+          awk -v v="$new" -v cf="$LATEST" '
+            { print }
+            !done && /^# Changelog/ {
+              print ""
+              print "## " v
+              print ""
+              print "- Updated cloudflared to " cf "."
+              done = 1
+            }
+          ' "$CHANGELOG" > "$CHANGELOG.tmp" && mv "$CHANGELOG.tmp" "$CHANGELOG"
+
+          git diff
+          echo "NEW_VERSION=$new" >> "$GITHUB_ENV"
+
+      - name: Commit, push and build
+        if: steps.check.outputs.update == 'true'
+        env:
+          LATEST: ${{ steps.check.outputs.latest }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Update cloudflared to $LATEST ($NEW_VERSION)"
+          git push origin HEAD:main
+          # Pushes made with GITHUB_TOKEN don't trigger workflows; dispatch does.
+          gh workflow run build.yaml --ref main
