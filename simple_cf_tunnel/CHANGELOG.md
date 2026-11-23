@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0.20261123
+
+- Updated cloudflared to 2026.11.2.
+
 ## 0.5.0.20261116
 
 - Updated cloudflared to 2026.11.0.

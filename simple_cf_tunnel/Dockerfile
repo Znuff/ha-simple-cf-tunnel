@@ -1,7 +1,7 @@
 FROM ghcr.io/hassio-addons/base:21.0.8
 
 ARG BUILD_ARCH="amd64"
-ARG CLOUDFLARED_VERSION="2026.11.0"
+ARG CLOUDFLARED_VERSION="2026.11.2"
 
 RUN set -eux; \
     apk add --no-cache python3; \
